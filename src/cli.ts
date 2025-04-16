@@ -16,7 +16,7 @@ program
   .option('-o, --output <path>', 'Output path for the PDF', './output.pdf')
   .option('-t, --title <title>', 'Title for the PDF document', 'Code Documentation')
   .option('--theme <theme>', 'Syntax highlighting theme', 'github')
-  .option('--font-size <size>', 'Font size for code', '10')
+  .option('--font-size <size>', 'Font size for code', '8')
   .option('--line-numbers', 'Show line numbers', true)
   .option('--no-line-numbers', 'Hide line numbers')
   .option('-v, --verbose', 'Enable verbose logging')
