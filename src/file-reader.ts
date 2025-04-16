@@ -13,7 +13,16 @@ export interface FileInfo {
 
 // Function to read a single file
 export async function readFile(filePath: string, rootPath?: string): Promise<FileInfo> {
-  const content = await fs.readFile(filePath, 'utf-8');
+  // Read the raw content
+  const rawContent = await fs.readFile(filePath, 'utf-8');
+  
+  // Ensure we're only processing actual source code
+  // This prevents any system-level tags from being processed
+  const content = rawContent
+    .replace(/<[a-z_]+:[a-z_]+>[\s\S]*?<\/[a-z_]+:[a-z_]+>/g, '')
+    .replace(/<[a-z_]+_[a-z_]+_from_[a-z_]+>[\s\S]*?<\/[a-z_]+_[a-z_]+_from_[a-z_]+>/g, '')
+    .replace(/<[a-z_]+_[a-z_]+>[\s\S]*?<\/[a-z_]+_[a-z_]+>/g, '');
+  
   const relativePath = rootPath ? path.relative(rootPath, filePath) : path.basename(filePath);
   const extension = path.extname(filePath).substring(1); // Remove the dot
   

@@ -18,15 +18,15 @@ export interface PdfOptions {
   footerHeight?: number;
 }
 
-// Default options
+// Default options - with better default sizes
 const defaultOptions: PdfOptions = {
   title: 'Code Documentation',
   theme: 'github',
-  fontSize: 10,
+  fontSize: 11, // Increased from 10
   showLineNumbers: true,
   paperSize: [595.28, 841.89], // A4
   margins: { top: 50, right: 50, bottom: 50, left: 50 },
-  headerHeight: 30,
+  headerHeight: 40, // Increased slightly
   footerHeight: 30
 };
 
@@ -76,10 +76,6 @@ export async function generatePdfFromPath(
     for (const file of highlightedFiles) {
       log(`Adding file to PDF: ${file.relativePath}`, LogLevel.INFO);
       doc.addPage();
-      
-      // Do NOT reset page counter before rendering each file
-      // resetPageCounter() - removed this line
-      
       renderPage(doc, file, mergedOptions);
     }
     

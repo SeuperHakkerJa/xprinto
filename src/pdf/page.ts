@@ -5,6 +5,13 @@ import { PdfOptions } from './generator';
 // Track page number across page renders - global counter
 let currentPageNumber = 1;
 
+// Define token type for better type safety
+interface RenderToken {
+  text: string;
+  color?: string;
+  fontStyle?: string;
+}
+
 export function renderPage(
   doc: PDFKit.PDFDocument,
   file: HighlightedFile,
@@ -22,13 +29,16 @@ export function renderPage(
   
   // Calculate line number column width based on the number of lines
   const maxLineNumber = file.highlightedLines.length;
-  const lineNumberWidth = options.showLineNumbers ? Math.max(String(maxLineNumber).length * options.fontSize * 0.6, 30) : 0;
+  const lineNumberWidth = options.showLineNumbers ? Math.max(String(maxLineNumber).length * options.fontSize * 0.8, 50) : 0;
   
   // Render code
-  renderCodeBlock(doc, file, options, lineNumberWidth, startY, contentHeight);
+  renderCodeBlockSimple(doc, file, options, lineNumberWidth, startY, contentHeight);
   
   // Add footer with page number
   renderFooter(doc, options, currentPageNumber);
+  
+  // Increment page counter after rendering the page
+  currentPageNumber++;
 }
 
 function renderHeader(
@@ -48,7 +58,7 @@ function renderHeader(
   doc.font('Helvetica-Bold')
      .fontSize(12)
      .fillColor('#333333')
-     .text(file.relativePath, options.margins!.left + 10, headerY + 5, { 
+     .text(file.relativePath, options.margins!.left + 10, headerY + 8, { 
        width: pageWidth - 150, 
        align: 'left' 
      });
@@ -57,7 +67,7 @@ function renderHeader(
   doc.font('Helvetica')
      .fontSize(10)
      .fillColor('#666666')
-     .text(`Language: ${file.language.toUpperCase()}`, options.margins!.left + pageWidth - 140, headerY + 5, {
+     .text(`Language: ${file.language.toUpperCase()}`, options.margins!.left + pageWidth - 140, headerY + 8, {
        width: 130,
        align: 'right' 
      });
@@ -85,7 +95,7 @@ function renderFooter(
      .strokeColor('#dddddd')
      .stroke();
   
-  // Draw page number using the global counter
+  // Draw page number
   doc.font('Helvetica')
      .fontSize(10)
      .fillColor('#666666')
@@ -95,7 +105,7 @@ function renderFooter(
      });
 }
 
-function renderCodeBlock(
+function renderCodeBlockSimple(
   doc: PDFKit.PDFDocument,
   file: HighlightedFile,
   options: PdfOptions,
@@ -103,16 +113,18 @@ function renderCodeBlock(
   startY: number,
   contentHeight: number
 ): void {
-  // Set up monospaced font for code
+  // Set consistent monospace font
   doc.font('Courier')
      .fontSize(options.fontSize);
   
   // Calculate available width for code
-  const codeWidth = options.paperSize![0] - options.margins!.left - options.margins!.right - lineNumberWidth - 20; // Extra padding
+  const codeWidth = options.paperSize![0] - options.margins!.left - options.margins!.right - lineNumberWidth - 30;
   
-  // Current Y position for drawing
-  let currentY = startY;
-  const lineHeight = options.fontSize * 1.4; // Line height slightly larger than font size
+  // Calculate line height (increased for better readability)
+  const lineHeight = options.fontSize * 1.8;
+  
+  // Current position for drawing
+  let currentY = startY + 10;
   
   // Draw background for the code block
   doc.rect(options.margins!.left, startY, options.paperSize![0] - options.margins!.left - options.margins!.right, contentHeight)
@@ -124,9 +136,12 @@ function renderCodeBlock(
        .fill('#e8e8e8');
   }
   
-  // Render each line
+  // Process each line of code
   for (let i = 0; i < file.highlightedLines.length; i++) {
     const line = file.highlightedLines[i];
+    
+    // Starting X position for code content
+    const codeX = options.margins!.left + (options.showLineNumbers ? lineNumberWidth + 15 : 15);
     
     // Check if we need a new page
     if (currentY + lineHeight > startY + contentHeight) {
@@ -140,7 +155,7 @@ function renderCodeBlock(
       currentPageNumber++;
       
       // Reset current Y position
-      currentY = startY;
+      currentY = startY + 10;
       
       // Add header to new page
       renderHeader(doc, file, options);
@@ -159,77 +174,170 @@ function renderCodeBlock(
     // Draw line number if enabled
     if (options.showLineNumbers) {
       doc.font('Courier-Bold')
+         .fontSize(options.fontSize)
          .fillColor('#888888')
          .text(
            String(line.lineNumber).padStart(String(file.highlightedLines.length).length, ' '),
            options.margins!.left + 5,
            currentY,
-           { lineBreak: false }
+           { width: lineNumberWidth - 10, align: 'right' }
          );
     }
     
-    // Calculate starting X position for code
-    const codeX = options.margins!.left + (options.showLineNumbers ? lineNumberWidth + 10 : 0);
-    
-    // Draw code with syntax highlighting
-    let currentX = codeX;
-    let lineWrapped = false;
-    
+    // Calculate total width of the line (including spaces)
+    let totalWidth = 0;
     for (const token of line.tokens) {
-      // Set color for token
-      doc.font(token.fontStyle === 'bold' ? 'Courier-Bold' : token.fontStyle === 'italic' ? 'Courier-Oblique' : 'Courier')
-         .fillColor(token.color || '#000000');
-      
-      // Calculate width of token text
-      const tokenWidth = doc.widthOfString(token.text);
-      
-      // Check if token fits on current line
-      if (currentX + tokenWidth > codeX + codeWidth) {
-        // Move to next line
-        currentY += lineHeight;
-        currentX = codeX + 20; // Indent continuation lines
-        lineWrapped = true;
+      doc.font(token.fontStyle === 'bold' ? 'Courier-Bold' : 
+               token.fontStyle === 'italic' ? 'Courier-Oblique' : 'Courier');
+      totalWidth += doc.widthOfString(token.text);
+    }
+    
+    // Check if line needs wrapping
+    if (totalWidth <= codeWidth) {
+      // Simple case: Draw each token sequentially
+      let xPos = codeX;
+      for (const token of line.tokens) {
+        doc.font(token.fontStyle === 'bold' ? 'Courier-Bold' : 
+                token.fontStyle === 'italic' ? 'Courier-Oblique' : 'Courier')
+           .fillColor(token.color || '#000000');
         
-        // Check if we need a new page
-        if (currentY + lineHeight > startY + contentHeight) {
-          // Add footer to current page
-          renderFooter(doc, options, currentPageNumber);
-          
-          // Add a new page
-          doc.addPage();
-          
-          // Increment page counter
-          currentPageNumber++;
-          
-          // Reset current Y position
-          currentY = startY;
-          
-          // Add header to new page
-          renderHeader(doc, file, options);
-          
-          // Draw background for the code block on the new page
-          doc.rect(options.margins!.left, startY, options.paperSize![0] - options.margins!.left - options.margins!.right, contentHeight)
-             .fill('#f8f8f8');
-          
-          // Draw line number background if line numbers are shown
-          if (options.showLineNumbers) {
-            doc.rect(options.margins!.left, startY, lineNumberWidth, contentHeight)
-               .fill('#e8e8e8');
+        doc.text(token.text, xPos, currentY, { continued: false });
+        xPos += doc.widthOfString(token.text);
+      }
+      
+      currentY += lineHeight;
+
+    } else {
+      // Handle wrapped lines
+      // Two-pass approach: First break into lines, then render
+      const virtualLines: RenderToken[][] = [];
+      let currentVirtualLine: RenderToken[] = [];
+      let currentLineWidth = 0;
+      
+      // First pass: Determine line breaks
+      for (const token of line.tokens) {
+        const font = token.fontStyle === 'bold' ? 'Courier-Bold' : 
+                     token.fontStyle === 'italic' ? 'Courier-Oblique' : 'Courier';
+        doc.font(font);
+        
+        // If token would make line too long, create a new virtual line
+        if (currentLineWidth + doc.widthOfString(token.text) > codeWidth) {
+          // If token itself is very long, we need to split it
+          if (doc.widthOfString(token.text) > codeWidth / 2) {
+            // Split long token into parts
+            let remainingText = token.text;
+            
+            while (remainingText.length > 0) {
+              // Find maximum characters that can fit
+              let charsThatFit = 0;
+              let spaceLeft = codeWidth - currentLineWidth;
+              
+              if (spaceLeft < doc.widthOfString('W')) {
+                // Not enough space on current line, add to next line
+                virtualLines.push([...currentVirtualLine]);
+                currentVirtualLine = [];
+                currentLineWidth = 0;
+                spaceLeft = codeWidth;
+              }
+              
+              // Try to fit as many characters as possible
+              for (let j = 1; j <= remainingText.length; j++) {
+                const partWidth = doc.widthOfString(remainingText.substring(0, j));
+                if (partWidth <= spaceLeft) {
+                  charsThatFit = j;
+                } else {
+                  break;
+                }
+              }
+              
+              if (charsThatFit > 0) {
+                const partText = remainingText.substring(0, charsThatFit);
+                const partToken: RenderToken = {
+                  text: partText,
+                  color: token.color,
+                  fontStyle: token.fontStyle
+                };
+                
+                currentVirtualLine.push(partToken);
+                currentLineWidth += doc.widthOfString(partText);
+                remainingText = remainingText.substring(charsThatFit);
+              }
+              
+              if (remainingText.length > 0) {
+                // We have more text that needs to go to the next line
+                virtualLines.push([...currentVirtualLine]);
+                currentVirtualLine = [];
+                currentLineWidth = 0;
+              }
+            }
+          } else {
+            // Token doesn't fit on current line but isn't too long
+            if (currentVirtualLine.length > 0) {
+              virtualLines.push([...currentVirtualLine]);
+            }
+            currentVirtualLine = [token];
+            currentLineWidth = doc.widthOfString(token.text);
           }
+        } else {
+          // Token fits on current line
+          currentVirtualLine.push(token);
+          currentLineWidth += doc.widthOfString(token.text);
         }
       }
       
-      // Draw token text
-      doc.text(token.text, currentX, currentY, { continued: true });
+      // Add the last virtual line if it has content
+      if (currentVirtualLine.length > 0) {
+        virtualLines.push(currentVirtualLine);
+      }
       
-      // Update current X position
-      currentX += tokenWidth;
+      // Second pass: Render each virtual line
+      let isFirstLine = true;
+      for (const vLine of virtualLines) {
+        // Check if we need a new page
+        if (currentY + lineHeight > startY + contentHeight) {
+          renderFooter(doc, options, currentPageNumber);
+          doc.addPage();
+          currentPageNumber++;
+          currentY = startY + 10;
+          renderHeader(doc, file, options);
+          
+          // Redraw backgrounds
+          doc.rect(options.margins!.left, startY, options.paperSize![0] - options.margins!.left - options.margins!.right, contentHeight)
+            .fill('#f8f8f8');
+          
+          if (options.showLineNumbers) {
+            doc.rect(options.margins!.left, startY, lineNumberWidth, contentHeight)
+              .fill('#e8e8e8');
+          }
+        }
+        
+        // For wrapped lines after the first, show continuation marker
+        if (!isFirstLine && options.showLineNumbers) {
+          doc.font('Courier')
+             .fontSize(options.fontSize)
+             .fillColor('#888888')
+             .text('↪', options.margins!.left + lineNumberWidth/2 - 10, currentY, { align: 'center' });
+        }
+        
+        // Draw tokens for this virtual line
+        let xPos = codeX;
+        // Add indentation for continuation lines
+        if (!isFirstLine) {
+          xPos += options.fontSize * 2;
+        }
+        
+        for (const token of vLine) {
+          doc.font(token.fontStyle === 'bold' ? 'Courier-Bold' : 
+                  token.fontStyle === 'italic' ? 'Courier-Oblique' : 'Courier')
+             .fillColor(token.color || '#000000');
+          
+          doc.text(token.text, xPos, currentY, { continued: false });
+          xPos += doc.widthOfString(token.text);
+        }
+        
+        currentY += lineHeight;
+        isFirstLine = false;
+      }
     }
-    
-    // End the line
-    doc.text('', 0, 0);
-    
-    // Move to next line (add extra space if line was wrapped)
-    currentY += lineWrapped ? lineHeight * 0.2 : lineHeight;
   }
 }
