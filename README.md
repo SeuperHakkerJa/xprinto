@@ -30,9 +30,9 @@ Convert code repositories or directories into beautifully formatted PDF document
 
 
 ```bash
-# Process the current directory using npx
-npx codepdf . -o report.pdf --theme dark
+# Process the current directory 
+npx codepdf . -o report.pdf 
 
 # Process another directory
-npx codepdf ~/my-project -o project.pdf -f 8
+npx codepdf ~/my-project -o project.pdf 
 ```
