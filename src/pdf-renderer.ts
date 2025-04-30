@@ -148,7 +148,6 @@ function addTableOfContents(
         if (doc.y > tocEndY - (tocLineHeight * 2)) {
              doc.addPage();
              doc.y = doc.page.margins.top; // Reset Y to top margin
-             // Re-render TOC title maybe? Or just continue entries. For now, continue.
         }
 
         // Directory Header
@@ -296,7 +295,7 @@ function renderCodeFile(
     options: PdfOptions,
     theme: SyntaxTheme,
     initialPageNumber: number // This is the LOGICAL page number this file starts on
-): number { // Returns the last PHYSICAL page number used by this file
+): number { // Returns the last LOGICAL page number used by this file
 
     let currentPage = initialPageNumber; // Track the logical page number for the footer
     const contentWidth = getContentWidth(doc, options);
@@ -308,72 +307,68 @@ function renderCodeFile(
 
     // Calculate line number column width
     const maxLineNumDigits = String(file.highlightedLines.length).length;
-    // Ensure minimum width for line numbers, add padding
     const lineNumberWidth = options.showLineNumbers ? Math.max(maxLineNumDigits * options.fontSize * 0.65 + CODE_BLOCK_PADDING, 35 + CODE_BLOCK_PADDING) : 0;
     const lineNumberPaddingRight = 10; // Space between line number and code
-    // Adjust codeStartX based on whether line numbers are shown
     const codeStartX = startX + (options.showLineNumbers ? lineNumberWidth + lineNumberPaddingRight : CODE_BLOCK_PADDING);
     const codeWidth = contentWidth - (codeStartX - startX) - CODE_BLOCK_PADDING; // Subtract right padding
     const wrapIndent = ' '.repeat(WRAP_INDENT_MULTIPLIER);
     const wrapIndentWidth = doc.font(options.codeFont).fontSize(options.fontSize).widthOfString(wrapIndent);
 
     // --- Page Setup Function ---
-    // This function now focuses ONLY on setting up the visual elements of a page
-    const setupPageVisuals = () => {
+    // This function now also returns the starting Y position for content on the page
+    const setupPageVisuals = (): number => {
         renderHeader(doc, file, options, theme);
         renderFooter(doc, currentPage, options, theme); // Use the current logical page number
-        doc.y = startY; // Reset Y position to top of content area
+        const pageStartY = startY; // Top of the content area
+        doc.y = pageStartY; // Reset Y position
 
         // --- Draw Code Block Container ---
-        doc.rect(startX, startY, contentWidth, contentHeight)
+        doc.rect(startX, pageStartY, contentWidth, contentHeight)
            .fillColor(theme.backgroundColor)
            .lineWidth(0.75)
            .strokeColor(theme.borderColor)
            .fillAndStroke();
 
         // Draw line number background and separator if shown
-        if (options.showLineNumbers) {
-            doc.rect(startX, startY, lineNumberWidth, contentHeight)
+        if (options.showLineNumbers && lineNumberWidth > 0) { // Check width > 0
+            doc.rect(startX, pageStartY, lineNumberWidth, contentHeight)
                .fillColor(theme.lineNumberBackground)
                .fill();
-             doc.moveTo(startX + lineNumberWidth, startY)
-                .lineTo(startX + lineNumberWidth, startY + contentHeight)
+             doc.moveTo(startX + lineNumberWidth, pageStartY)
+                .lineTo(startX + lineNumberWidth, pageStartY + contentHeight)
                 .lineWidth(0.5)
                 .strokeColor(theme.borderColor)
                 .stroke();
         }
-         // Add initial top padding
-         doc.y += CODE_BLOCK_PADDING / 2;
+         // Return the Y position where content should start (after top padding)
+         return pageStartY + CODE_BLOCK_PADDING / 2;
     };
 
     // --- Initial Page Setup ---
-    // Add the first page for this file explicitly
     doc.addPage();
-    setupPageVisuals(); // Set up the visuals for the first page
+    let currentLineY = setupPageVisuals(); // Use the returned starting Y
 
     // --- Render Loop ---
     for (const line of file.highlightedLines) {
+        const lineStartY = currentLineY; // Store the Y where this original line starts
 
         // Check if we need a new page BEFORE rendering the line
-        // Compare current Y against the bottom edge minus padding
-        if (doc.y + lineHeight > endY - CODE_BLOCK_PADDING) {
+        // Use lineStartY for the check
+        if (lineStartY + lineHeight > endY - CODE_BLOCK_PADDING) {
              doc.addPage();
              currentPage++; // Increment the logical page number for the footer
-             setupPageVisuals(); // Set up visuals for the new page
+             currentLineY = setupPageVisuals(); // Set up visuals and get new starting Y
         }
 
-        const currentLineY = doc.y; // Store Y position for the line
-
-        // 1. Draw Line Number (if enabled)
-        if (options.showLineNumbers) {
-            // Ensure font is set before drawing text
+        // 1. Draw Line Number (if enabled) - Use currentLineY
+        if (options.showLineNumbers && lineNumberWidth > 0) {
             doc.font(options.codeFont)
                .fontSize(options.fontSize)
                .fillColor(theme.lineNumberColor)
                .text(
                    String(line.lineNumber).padStart(maxLineNumDigits, ' '),
                    startX + CODE_BLOCK_PADDING / 2, // Start drawing within padding
-                   currentLineY,
+                   currentLineY, // Use the managed Y position
                    {
                        width: lineNumberWidth - CODE_BLOCK_PADDING, // Constrain width to padded area
                        align: 'right', // Right-align within the column
@@ -388,25 +383,26 @@ function renderCodeFile(
 
         // Helper function to handle moving to the next line during wrapping
         const moveToNextWrapLine = () => {
-            doc.y += lineHeight; // Move Y down
-            // Check for page break *after* moving Y, before drawing next segment
-            if (doc.y + lineHeight > endY - CODE_BLOCK_PADDING) {
+            // Increment our managed Y position
+            currentLineY += lineHeight;
+            // Check for page break using the *new* Y position
+            if (currentLineY + lineHeight > endY - CODE_BLOCK_PADDING) {
                 doc.addPage();
                 currentPage++; // Increment logical page number
-                setupPageVisuals(); // Setup visuals for new page
+                currentLineY = setupPageVisuals(); // Setup visuals and reset Y
             }
+            // Set X for the wrapped line *after* potential page setup
             currentX = codeStartX + wrapIndentWidth; // Apply wrap indent for the new line
-            // Draw wrap indicator if line numbers are shown
-            if (options.showLineNumbers) {
+            // Draw wrap indicator if line numbers are shown - Use currentLineY
+            if (options.showLineNumbers && lineNumberWidth > 0) {
                 doc.font(options.codeFont).fontSize(options.fontSize).fillColor(theme.lineNumberColor)
-                   .text('↪', startX + CODE_BLOCK_PADDING / 2, doc.y, { width: lineNumberWidth - CODE_BLOCK_PADDING, align: 'right', lineBreak: false });
+                   .text('↪', startX + CODE_BLOCK_PADDING / 2, currentLineY, { width: lineNumberWidth - CODE_BLOCK_PADDING, align: 'right', lineBreak: false });
             }
         };
 
 
         // Iterate through tokens for the current source line
         for (const token of line.tokens) {
-             // Set font and color for the current token
              doc.font(options.codeFont + (token.fontStyle === 'bold' ? '-Bold' : token.fontStyle === 'italic' ? '-Oblique' : ''))
                 .fontSize(options.fontSize)
                 .fillColor(token.color || theme.defaultColor);
@@ -416,17 +412,24 @@ function renderCodeFile(
 
             // Check if token fits on the current PDF line segment
             if (currentX + tokenWidth <= codeStartX + codeWidth) {
-                // Fits: Draw it and update X
-                doc.text(tokenText, currentX, doc.y, { continued: true, lineBreak: false });
+                // Fits: Draw it and update X - Use currentLineY
+                doc.text(tokenText, currentX, currentLineY, { continued: true, lineBreak: false });
                 currentX += tokenWidth;
             } else {
                 // Needs wrapping: Process character by character or segment by segment
                 let remainingText = tokenText;
 
-                // If it's not the first token, move to the next line immediately
-                if (!isFirstTokenOfLine) {
+                // Move to next line to start the wrapped segment
+                // We need to handle the case where the *first* token overflows
+                if (isFirstTokenOfLine && currentX === codeStartX) {
+                    // First token overflows immediately, move before drawing anything
                     moveToNextWrapLine();
+                } else if (!isFirstTokenOfLine) {
+                     // Not the first token, move to start the wrap
+                     moveToNextWrapLine();
                 }
+                // If it's the first token but *some* part fit, the loop below handles subsequent moves.
+
 
                 while (remainingText.length > 0) {
                     let fitsChars = 0;
@@ -438,7 +441,8 @@ function renderCodeFile(
                     for (let i = 1; i <= remainingText.length; i++) {
                         const segment = remainingText.substring(0, i);
                         const width = doc.widthOfString(segment);
-                        if (width <= availableWidth) {
+                        // Use a small tolerance to prevent issues with floating point comparisons
+                        if (width <= availableWidth + 0.001) {
                             fitsChars = i;
                             currentSegmentWidth = width;
                         } else {
@@ -447,16 +451,19 @@ function renderCodeFile(
                     }
 
                      if (fitsChars === 0 && remainingText.length > 0) {
-                         // Cannot fit even one character - force at least one
-                         // This might happen if wrapIndentWidth makes the line too narrow
+                         // Cannot fit even one character
                          fitsChars = 1;
                          currentSegmentWidth = doc.widthOfString(remainingText[0]);
                          logger.warn(`Cannot fit character '${remainingText[0]}' on wrapped line ${line.lineNumber} of ${file.relativePath}.`);
                      }
 
                     const textToDraw = remainingText.substring(0, fitsChars);
-                    // Draw the segment that fits
-                    doc.text(textToDraw, currentX, doc.y, { continued: true, lineBreak: false });
+                    // Draw the segment that fits - Use currentLineY
+                    // Ensure font/color are set correctly for this segment
+                    doc.font(options.codeFont + (token.fontStyle === 'bold' ? '-Bold' : token.fontStyle === 'italic' ? '-Oblique' : ''))
+                       .fontSize(options.fontSize)
+                       .fillColor(token.color || theme.defaultColor);
+                    doc.text(textToDraw, currentX, currentLineY, { continued: true, lineBreak: false });
 
                     currentX += currentSegmentWidth;
                     remainingText = remainingText.substring(fitsChars);
@@ -470,19 +477,15 @@ function renderCodeFile(
              isFirstTokenOfLine = false; // After processing the first token, this flag is false
         } // End for loop (tokens)
 
-        // Move Y position down for the next line in the source file
-        doc.y = currentLineY + lineHeight;
+        // ** Advance our managed Y position for the next source line **
+        // This should happen regardless of wrapping.
+        currentLineY += lineHeight;
+
 
     } // End for loop (lines)
 
     logger.info(`Rendered file ${file.relativePath} spanning pages ${initialPageNumber}-${currentPage}.`);
-    // Return the physical page count used by this file.
-    // We need to know the actual number of pages added by doc.addPage() within this function.
-    // This is tricky without direct access to pdfkit's internal page count *during* rendering.
-    // A simpler approach is to return the final logical page number.
-    // The main function will sum these up, which might lead to inaccurate TOC numbers if wrapping causes many extra pages.
-    // For now, returning the final logical page number.
-    return currentPage;
+    return currentPage; // Return the last logical page number used
 }
 
 
@@ -558,9 +561,6 @@ export async function generatePdf(
     }
 
     // --- Finalize PDF ---
-    // The page numbers in the footer should now be correct based on the logical flow.
-    // The actual physical page count might differ slightly if TOC estimation was off,
-    // but the footer numbering should be consistent.
     doc.end();
 
     await new Promise<void>((resolve, reject) => {
