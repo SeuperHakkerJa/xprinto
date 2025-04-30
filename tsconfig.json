@@ -1,16 +1,16 @@
 {
     "compilerOptions": {
-      "target": "es2018",
-      "module": "commonjs",
-      "outDir": "./dist",
-      "rootDir": "./src",
-      "strict": true,
-      "esModuleInterop": true,
-      "skipLibCheck": true,
-      "forceConsistentCasingInFileNames": true,
-      "declaration": true,
-      "sourceMap": true
+      "target": "ES2016", // Target modern Node versions
+      "module": "CommonJS", // Standard Node module system
+      "outDir": "./dist", // Output directory for compiled JS
+      "rootDir": "./src", // Source directory
+      "strict": true, // Enable strict type checking
+      "esModuleInterop": true, // Allows default imports from commonjs modules
+      "skipLibCheck": true, // Skip type checking of declaration files
+      "forceConsistentCasingInFileNames": true, // Ensure consistent file casing
+      "resolveJsonModule": true // Allow importing JSON files
     },
-    "include": ["src/**/*"],
-    "exclude": ["node_modules", "dist"]
+    "include": ["src/**/*"], // Which files to include
+    "exclude": ["node_modules", "**/*.spec.ts"] // Which files to exclude
   }
+  
