@@ -6,13 +6,21 @@ import fs from 'fs-extra';
 import { run } from './main';
 import { logger } from './utils/logger';
 import { PdfOptions } from './utils/types';
-import { themes } from './utils/themes'; 
- 
+import { themes } from './utils/themes'; // Import available themes
+
 const program = new Command();
 
 // Get version from package.json
-const packageJsonPath = path.join(__dirname, '..', 'package.json'); // Adjust path if needed
-const packageJson = fs.readJsonSync(packageJsonPath);
+// Ensure this path is correct relative to the compiled 'dist' directory
+const packageJsonPath = path.join(__dirname, '..', 'package.json');
+let packageJson: { version: string };
+try {
+    packageJson = fs.readJsonSync(packageJsonPath);
+} catch (error) {
+    logger.warn(`Could not read package.json at ${packageJsonPath}. Using default version.`);
+    packageJson = { version: '0.0.0' }; // Fallback version
+}
+
 
 program
     .name('xprinto')
@@ -23,8 +31,9 @@ program
     .option('-t, --title <title>', 'Title for the PDF document', 'Code Repository Documentation')
     .option('-f, --font-size <size>', 'Font size for code blocks', '9') // Adjusted default
     .option('--theme <name>', `Syntax highlighting theme (available: ${Object.keys(themes).join(', ')})`, 'light')
-    .option('--line-numbers', 'Show line numbers in code blocks (default)')
-    .option('--no-line-numbers', 'Hide line numbers in code blocks')
+    // **Explicitly default line numbers to true**
+    .option('--line-numbers', 'Show line numbers in code blocks', true)
+    .option('--no-line-numbers', 'Hide line numbers in code blocks') // Commander handles making it false if present
     .option('--paper-size <size>', 'Paper size (A4, Letter, or width,height in points)', 'A4')
     .option('-v, --verbose', 'Enable verbose logging output', false)
     .action(async (repoPathArg, options) => {
@@ -82,11 +91,11 @@ program
             output: resolvedOutputPath,
             title: options.title,
             fontSize: parseInt(options.fontSize, 10),
-            showLineNumbers: options.lineNumbers, // Commander handles --no- prefix automatically
+            // Use the value processed by Commander (respects --no-line-numbers)
+            showLineNumbers: options.lineNumbers,
             theme: options.theme.toLowerCase(),
             paperSize: paperSizeOption,
             // --- Sensible Defaults for Layout ---
-            // Adjust these margins and heights as needed for aesthetics
             margins: { top: 50, right: 40, bottom: 50, left: 40 },
             headerHeight: 25, // Space for file path header
             footerHeight: 25, // Space for page number footer

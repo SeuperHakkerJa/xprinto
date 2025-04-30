@@ -11,6 +11,7 @@ const TOC_INDENT = 20; // Points to indent file names under directories in TOC
 const WRAP_INDENT_MULTIPLIER = 2; // How many characters to indent wrapped lines
 const TOC_DOT_PADDING = 5; // Points padding around dots
 const CODE_BLOCK_PADDING = 10; // Padding inside the code block container
+const WRAP_INDICATOR = '->'; // Use simple ASCII for wrap indicator
 
 // --- Helper Functions ---
 
@@ -362,17 +363,24 @@ function renderCodeFile(
 
         // 1. Draw Line Number (if enabled) - Use currentLineY
         if (options.showLineNumbers && lineNumberWidth > 0) {
-            doc.font(options.codeFont)
+            const lnColor = (theme.lineNumberColor && theme.lineNumberColor !== theme.lineNumberBackground)
+                            ? theme.lineNumberColor
+                            : '#888888'; // Fallback gray color
+            const numStr = String(line.lineNumber).padStart(maxLineNumDigits, ' ');
+            const numX = startX + CODE_BLOCK_PADDING / 2;
+            const numWidth = lineNumberWidth - CODE_BLOCK_PADDING;
+
+            doc.font(options.codeFont) // Ensure code font is used
                .fontSize(options.fontSize)
-               .fillColor(theme.lineNumberColor)
+               .fillColor(lnColor) // Use validated/fallback color
                .text(
-                   String(line.lineNumber).padStart(maxLineNumDigits, ' '),
-                   startX + CODE_BLOCK_PADDING / 2, // Start drawing within padding
+                   numStr,
+                   numX,
                    currentLineY, // Use the managed Y position
                    {
-                       width: lineNumberWidth - CODE_BLOCK_PADDING, // Constrain width to padded area
+                       width: numWidth, // Constrain width to padded area
                        align: 'right', // Right-align within the column
-                       lineBreak: false
+                       lineBreak: false // Prevent wrapping of the number itself
                    }
                );
         }
@@ -395,8 +403,12 @@ function renderCodeFile(
             currentX = codeStartX + wrapIndentWidth; // Apply wrap indent for the new line
             // Draw wrap indicator if line numbers are shown - Use currentLineY
             if (options.showLineNumbers && lineNumberWidth > 0) {
-                doc.font(options.codeFont).fontSize(options.fontSize).fillColor(theme.lineNumberColor)
-                   .text('↪', startX + CODE_BLOCK_PADDING / 2, currentLineY, { width: lineNumberWidth - CODE_BLOCK_PADDING, align: 'right', lineBreak: false });
+                 const wrapColor = (theme.lineNumberColor && theme.lineNumberColor !== theme.lineNumberBackground)
+                                 ? theme.lineNumberColor
+                                 : '#888888'; // Fallback gray color
+                // **FIX**: Use simple ASCII indicator instead of Unicode
+                doc.font(options.codeFont).fontSize(options.fontSize).fillColor(wrapColor)
+                   .text(WRAP_INDICATOR, startX + CODE_BLOCK_PADDING / 2, currentLineY, { width: lineNumberWidth - CODE_BLOCK_PADDING, align: 'right', lineBreak: false });
             }
         };
 
@@ -408,7 +420,12 @@ function renderCodeFile(
                 .fillColor(token.color || theme.defaultColor);
 
             const tokenText = token.text;
+            // Skip drawing if token text is empty (can happen with highlighting artifacts)
+             if (!tokenText || tokenText.length === 0) {
+                 continue;
+             }
             const tokenWidth = doc.widthOfString(tokenText);
+
 
             // Check if token fits on the current PDF line segment
             if (currentX + tokenWidth <= codeStartX + codeWidth) {
@@ -420,7 +437,7 @@ function renderCodeFile(
                 let remainingText = tokenText;
 
                 // Move to next line to start the wrapped segment
-                // We need to handle the case where the *first* token overflows
+                // Handle the case where the *first* token overflows
                 if (isFirstTokenOfLine && currentX === codeStartX) {
                     // First token overflows immediately, move before drawing anything
                     moveToNextWrapLine();
@@ -452,10 +469,37 @@ function renderCodeFile(
 
                      if (fitsChars === 0 && remainingText.length > 0) {
                          // Cannot fit even one character
-                         fitsChars = 1;
-                         currentSegmentWidth = doc.widthOfString(remainingText[0]);
-                         logger.warn(`Cannot fit character '${remainingText[0]}' on wrapped line ${line.lineNumber} of ${file.relativePath}.`);
+                         // If available width is negative or zero, just move to next line
+                         if (availableWidth <= 0) {
+                             moveToNextWrapLine();
+                             // Recalculate available width for the new line
+                              const newAvailableWidth = (codeStartX + codeWidth) - currentX;
+                              // Try fitting again on the new line
+                              for (let i = 1; i <= remainingText.length; i++) {
+                                 const segment = remainingText.substring(0, i);
+                                 const width = doc.widthOfString(segment);
+                                 if (width <= newAvailableWidth + 0.001) {
+                                     fitsChars = i;
+                                     currentSegmentWidth = width;
+                                 } else {
+                                     break;
+                                 }
+                             }
+                             // If still can't fit, force 1 char
+                              if (fitsChars === 0) {
+                                 fitsChars = 1;
+                                 currentSegmentWidth = doc.widthOfString(remainingText[0]);
+                                 logger.warn(`Cannot fit character '${remainingText[0]}' even on new wrapped line ${line.lineNumber} of ${file.relativePath}.`);
+                             }
+
+                         } else {
+                             // Force 1 char if available width was positive but still failed
+                             fitsChars = 1;
+                             currentSegmentWidth = doc.widthOfString(remainingText[0]);
+                             logger.warn(`Cannot fit character '${remainingText[0]}' on wrapped line ${line.lineNumber} of ${file.relativePath}.`);
+                         }
                      }
+
 
                     const textToDraw = remainingText.substring(0, fitsChars);
                     // Draw the segment that fits - Use currentLineY
@@ -478,7 +522,6 @@ function renderCodeFile(
         } // End for loop (tokens)
 
         // ** Advance our managed Y position for the next source line **
-        // This should happen regardless of wrapping.
         currentLineY += lineHeight;
 
 
