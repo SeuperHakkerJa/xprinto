@@ -1,6 +1,6 @@
 {
   "name": "codepdf",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Convert code repositories or directories to beautiful PDFs with syntax highlighting.",
   "main": "dist/main.js",
   "types": "dist/main.d.ts",
@@ -13,12 +13,12 @@
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "clean": "rm -rf dist",
+    "prebuild": "npm run clean",
+    "build": "tsc && chmod +x dist/cli.js",
     "start": "ts-node src/cli.ts",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write \"src/**/*.ts\"",
-    "clean": "rm -rf dist",
-    "prebuild": "npm run clean",
     "prepublishOnly": "npm run build"
   },
   "repository": {
