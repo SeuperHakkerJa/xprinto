@@ -1,24 +1,48 @@
 {
-  "name": "xprinto-ng",
+  "name": "codepdf",
   "version": "1.0.0",
-  "description": "Convert code repositories to beautiful PDFs with syntax highlighting",
-  "main": "dist/cli.js",
+  "description": "Convert code repositories or directories to beautiful PDFs with syntax highlighting.",
+  "main": "dist/main.js",
+  "types": "dist/main.d.ts",
   "bin": {
-    "xprinto": "dist/cli.js"
+    "codepdf": "dist/cli.js"
   },
+  "files": [
+    "dist/**/*",
+    "README.md",
+    "LICENSE"
+  ],
   "scripts": {
     "build": "tsc",
     "start": "ts-node src/cli.ts",
+    "lint": "eslint . --ext .ts",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "clean": "rm -rf dist",
+    "prebuild": "npm run clean",
     "prepublishOnly": "npm run build"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/SeuperHakkerJa/codepdf.git"
   },
   "keywords": [
     "pdf",
     "code",
     "print",
-    "syntax highlighting"
+    "syntax highlighting",
+    "documentation",
+    "cli",
+    "typescript"
   ],
-  "author": "Your Name",
+  "author": "Your Name <your.email@example.com>",
   "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/SeuperHakkerJa/codepdf/issues"
+  },
+  "homepage": "https://github.com/SeuperHakkerJa/codepdf#readme",
+  "engines": {
+    "node": ">=16.0.0"
+  },
   "dependencies": {
     "commander": "^12.1.0",
     "fs-extra": "^11.2.0",
@@ -35,6 +59,12 @@
     "@types/highlight.js": "^10.1.0",
     "@types/node": "^20.14.2",
     "@types/pdfkit": "^0.13.4",
+    "@typescript-eslint/eslint-plugin": "^7.0.0",
+    "@typescript-eslint/parser": "^7.0.0",
+    "eslint": "^8.56.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-prettier": "^5.1.3",
+    "prettier": "^3.2.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.4.5"
   }
